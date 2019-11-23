@@ -38,11 +38,15 @@ class Dados{
     
     float getValor(int deslocamento){
       int i = index;
-      if (deslocamento == 1) {
-        if (i != 9){
+      if (deslocamento == -2) {
+        if (i != 1 && i != 0){
           i += deslocamento;
         } else {
-          i = 0;
+          if (i == 0){
+            i = 8;
+          } else {
+            i = 9;
+          }
         }
       } else if (deslocamento == -1) {
         if (i != 0){
