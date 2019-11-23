@@ -1,23 +1,7 @@
-/***************************************************************************
-  This is a library for the BMP280 humidity, temperature & pressure sensor
-
-  Designed specifically to work with the Adafruit BMEP280 Breakout
-  ----> http://www.adafruit.com/products/2651
-
-  These sensors use I2C or SPI to communicate, 2 or 4 pins are required
-  to interface.
-
-  Adafruit invests time and resources providing this open source code,
-  please support Adafruit andopen-source hardware by purchasing products
-  from Adafruit!
-
-  Written by Limor Fried & Kevin Townsend for Adafruit Industries.
-  BSD license, all text above must be included in any redistribution
- ***************************************************************************/
-
+/*
 #include <Wire.h>
 #include <SPI.h>
-#include <Adafruit_BMP280.h>
+//#include <Adafruit_BMP280.h>
 #include <SD.h>
 
 #define BMP_SCK  (13)
@@ -51,7 +35,6 @@ void setup() {
     return; //NÃO FAZ MAIS NADA
   }
 
-  /* Default settings from datasheet. */
   bmp.setSampling(Adafruit_BMP280::MODE_NORMAL,
                   Adafruit_BMP280::SAMPLING_X2,
                   Adafruit_BMP280::SAMPLING_X16,
@@ -78,7 +61,7 @@ void loop() {
     Serial.println("bmp1:");
     Serial.print(F("Approx altitude = "));
     float h1 = bmp.readAltitude(1013.25);
-    Serial.print(h1); /* Adjusted to local forecast! */
+    Serial.print(h1);
     Serial.println(" m");
     salva("bmp1: ", h1);
 
@@ -93,3 +76,21 @@ void loop() {
     Serial.println();
     delay(2000);
 }
+*/
+
+#include "voo.h"
+int i = 1;
+Voo voo;
+void setup(){
+  
+}
+
+void loop(){
+  voo.addAltura(i);
+  i++;
+  Serial.print(voo.altura.getValor(0));
+  Serial.print(voo.velocidade.getValor(0));
+  Serial.print(voo.aceleracao.getValor(0));
+  delay(100);
+}
+
