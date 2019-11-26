@@ -55,7 +55,6 @@
 
 Adafruit_BMP280 bmp1, bmp2;               // Object used as BMP280 driver - I2C use
 const int chipSelect = CS_PIN;            // CS for SPI communication with SD card
-SDFile dataFile;                          // Object used as SD driver - SPI use
 volatile unsigned long timeCount = 0UL;   // A long is 32 bits long = 4294967296 levels
                                           // Using a dt=100us, it can count up to 119 hours
 volatile unsigned long timeSave1 = 0UL;   // Variable used for storing moment of last measure of sensor 1
@@ -82,6 +81,7 @@ ISR(TIMER1_COMPA_vect){
 
 /* Save data to SD function */
 void save_to_SD(String bmp, Voo dados){
+  File dataFile;                            // Object used as SD driver - SPI use
   float t = timeCount/10000.0;                // Time since start-up in seconds
   float h = dados.altura.getValor(-1);        // Height data
   Serial.println(F("Dados de altura internos:"));
@@ -90,18 +90,22 @@ void save_to_SD(String bmp, Voo dados){
   float a = dados.aceleracao.getValor(-1);    // Acceleration data
   int vsize = 4;
   float vect [vsize] = {t,h,v,a};
-  dataFile = SD.open("teste_placa.txt", FILE_WRITE);
+  dataFile = SD.open("antares.txt", FILE_WRITE);
+  if(!dataFile){
+    Serial.println(F("---------> ERRO na abertura do arquivo"));
+  }
   dataFile.print(bmp);
   Serial.print(bmp);
   for(int i=0; i<vsize; i++){
     dataFile.print("\t");
-    dataFile.print(vect[i], 5);
+    dataFile.print(vect[i]);
     Serial.print("\t");
-    Serial.print(vect[i], 5);
+    Serial.print(vect[i],5);
   }
   dataFile.print("\n");
   Serial.print("\n");
   dataFile.close();
+  return;
 }
 
 /* BMP height configuration - call on setup */
