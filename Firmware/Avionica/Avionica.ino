@@ -40,7 +40,6 @@
 #define CS_PIN    9         // Chip Select pin for SPI communication with SD card
 #define TIMER_TKS 200       // Timer ticks in a period (Timer 1 runs at 2MHz freq.) - [200 for period of 0.1ms]
 #define T_MEASURE 56        // Measure period (x 0.1ms) - [56 for 181.8 Hz]
-
 #define LED_TEST  (13)      // Digital output pin for testing
 
 
@@ -53,20 +52,22 @@
 
 /* ----- Global variables definitions ----- */
 
-Adafruit_BMP280 bmp1, bmp2;               // Object used as BMP280 driver - I2C use
 const int chipSelect = CS_PIN;            // CS for SPI communication with SD card
 volatile unsigned long timeCount = 0UL;   // A long is 32 bits long = 4294967296 levels
                                           // Using a dt=100us, it can count up to 119 hours
+volatile int measureCount = 0;            // Counter for dividing timer freq. to get measure freq.
+volatile byte state = 0;                  // State of the flight (E1 corresponds to 0, and so forth)
+volatile bool led_on = false;             // Variable for test LED state
+
+Adafruit_BMP280 bmp1, bmp2;               // Object used as BMP280 driver - I2C use
+Voo voo1 = Voo(50);                       // Object containing height, velocity, acceleration - sensor 1
+Voo voo2 = Voo(50);                       // Object containing height, velocity, acceleration - sensor 2
 volatile unsigned long timeSave1 = 0UL;   // Variable used for storing moment of last measure of sensor 1
 volatile unsigned long timeSave2 = 0UL;   // Variable used for storing moment of last measure of sensor 2
-volatile int measureCount = 0;            // Counter for dividing timer freq. to get measure freq.
 volatile float bmpPi1, bmpPi2;            // Initial pressures on sensors 1 and 2
 volatile float bmpHi1, bmpHi2;            // Initial height measured on sensors 1 and 2
 volatile float bmpD1, bmpD2;              // Derivative of height w.r.t. pressure on initial pressure 
-volatile byte state = 0;                  // State of the flight (E1 corresponds to 0, and so forth)
-volatile bool led_on = false;
-Voo voo1 = Voo(50);                       // Object containing height, velocity, acceleration - sensor 1
-Voo voo2 = Voo(50);                       // Object containing height, velocity, acceleration - sensor 2
+
 
 
 /* ----- Auxiliary function definitions ----- */
@@ -81,15 +82,13 @@ ISR(TIMER1_COMPA_vect){
 
 /* Save data to SD function */
 void save_to_SD(String bmp, Voo dados){
-  File dataFile;                            // Object used as SD driver - SPI use
-  float t = timeCount/10000.0;                // Time since start-up in seconds
-  float h = dados.altura.getValor(-1);        // Height data
+  File dataFile;                                        // Object used as SD driver - SPI use
   Serial.println(F("Dados de altura internos:"));
-  Serial.println(h);
-  float v = dados.velocidade.getValor(-1);    // Velocity data
-  float a = dados.aceleracao.getValor(-1);    // Acceleration data
   int vsize = 4;
-  float vect [vsize] = {t,h,v,a};
+  float vect [vsize] = {timeCount/10000.0,              // Time since start-up in seconds
+                        dados.altura.getValor(-1),      // Last acquired height measure [m]
+                        dados.velocidade.getValor(-1),  // Last acquired velocity measure [m/s]
+                        dados.aceleracao.getValor(-1)}; // Last acquired acceleration measure [m/s2]                     
   dataFile = SD.open("antares.txt", FILE_WRITE);
   if(!dataFile){
     Serial.println(F("---------> ERRO na abertura do arquivo"));
@@ -111,7 +110,7 @@ void save_to_SD(String bmp, Voo dados){
 /* BMP height configuration - call on setup */
 bool configure_BMP(byte bmp_nb){
   if(bmp_nb <=0 || bmp_nb >=3){
-    Serial.println(F("ERROR: get_dt -> invalid BMP number!"));
+    Serial.println(F("ERROR: configure_BMP -> invalid BMP number!"));
     return(false);
   }
   float bmpPi = 0;
@@ -119,7 +118,7 @@ bool configure_BMP(byte bmp_nb){
   float bmpDi = 0;
   int address = (bmp_nb == 1) ? ADD_BMP1 : ADD_BMP2;            // Gets bmp adress accordingly
   Adafruit_BMP280 * bmpHandle = (bmp_nb == 1) ? &bmp1 : &bmp2;  // Gets bmp object handle accordingly
-  if (!bmpHandle->begin(address)) {                              // Initialize BMP
+  if (!bmpHandle->begin(address)) {                             // Initialize BMP
     Serial.print(F("Could not find BMP280 sensor (add="));
     Serial.print(address);
     Serial.println(F("), check wiring and reset!"));
@@ -161,10 +160,10 @@ bool configure_BMP(byte bmp_nb){
 /* BMP height reading - Linear method */
 float read_BMP_h(byte bmp_nb){
   if(bmp_nb <=0 || bmp_nb >=3){
-    Serial.println(F("ERROR: get_dt -> invalid BMP number!"));
+    Serial.println(F("ERROR: read_BMP_h -> invalid BMP number!"));
     return(0);
   }
-  float p,hl;
+  float p,h;
   Adafruit_BMP280 * bmpHandle = (bmp_nb == 1) ? &bmp1 : &bmp2;     // Gets bmp object handle accordingly
   float bmpPi = (bmp_nb == 1) ? bmpPi1 : bmpPi2;
   float bmpHi = (bmp_nb == 1) ? bmpHi1 : bmpHi2;
@@ -172,8 +171,8 @@ float read_BMP_h(byte bmp_nb){
   p = bmpHandle->readPressure();
 //  Serial.println(F("Pressure reading: "));
 //  Serial.println(p,5);
-  hl = bmpHi + bmpDi * (p - bmpPi);                           // Linearization of height
-  return(hl);
+  h = bmpHi + bmpDi * (p - bmpPi);                           // Linearization of height
+  return(h);
 }
 
 /* BMP average valid reading - call on loop */
