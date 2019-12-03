@@ -22,12 +22,13 @@
  ***************************************************************************/
 
 /*  TODO:
- *   - Implement sea pressure definition at startup   5
+ *   - Implement sea pressure definition at startup   5 
  *   - Implement filter not using objects             1   OK - Use 6 values in dados instead of 10
  *   - Implement state transitions                    2   OK - Apogee done / 
  *   - Implement flag diagnostics                     3   OK - ignState and state
  *   - Implement analogic ignitor readings            4   OK - Function written
  *   - Implement SD initial write                     6   OK - two blank lines
+ *   - Implement burning finish condition             7   
  */
 
 /* ----- Library Inclusion ----- */
@@ -53,7 +54,7 @@
 #define IGN_V_ACTIVE  0.3       // Ignitor analog reading voltage when MOSFET is active [V]
 #define DELTA_H_FLY   20        // Height difference with respect to the launch site for flight condition [m]
 #define DELTA_H_LAND  50        // Height difference with respect to the launch site for landing condition [m]
-#define DELTA_V_FLY   5         // Minimum velocity for flight condition [m/s]
+#define DELTA_V_FLY   20        // Minimum velocity for flight condition [m/s]
 #define LED_TEST      (13)      // Digital output pin for testing
 #define V0            100       // Velocity to trigger apogee condition [m/s]
 #define V0_MARGIN     0.1       // Margin [%] around V0 value
@@ -343,6 +344,24 @@ bool landing_condition(){
   }
 }
 
+/* Identify end of propulsion Condition */
+bool burn_end_condition(){
+  byte count = 0;
+  for(int i=0; i<5; i++){
+    if(voo1.velocidadeF.getValor(-i) < voo1.velocidadeF.getValor(-i-1)){
+      count++; 
+    }
+  }
+  
+  if(count>4){
+    return(true);
+  }
+  else{
+    return(false);
+  }
+}
+
+
 /* ----- Setup function definition ----- */
 
 void setup() {
@@ -428,7 +447,10 @@ void loop() {
       }
       break;
     case 1:         // E2 = Propulsive Flight
-      // Check if end of propulsion
+      if(burn_end_condition()){
+        Serial.println(F("E2 --> E3"));
+        state = 2;
+      }
       break;
     case 2:         // E3 = Ballistic Flight
       if(apogee_condition()){
