@@ -42,10 +42,10 @@
 
 /* ----- Macro definitions ----- */
 
-#define IGN           (2)       // I/O pin for ignitor digital output
-#define BUZZ          (8)       // I/O pin for buzzer digital output
+#define IGN           (8)       // I/O pin for ignitor digital output
+#define BUZZ          (10)      // I/O pin for buzzer digital output
 #define IGN_READ      (A1)      // I/O pin for analogic ignitor read
-#define UNUSED_D4     (4)       // Unused D4 pin
+#define CS_PIN        (A0)      // Chip Select pin - SPI for SD
 #define ADD_BMP1      0x76      // Address of BMP no. 1
 #define ADD_BMP2      0x77      // Address of BMP no. 2
 #define TIMER_TKS     200       // Timer ticks in a period (Timer 1 runs at 2MHz freq.) - [200 for period of 0.1ms]
@@ -63,7 +63,7 @@
 
 /* ----- Constant definitions ----- */
 
-const byte chipSelect = 10;               // Chip Select pin for SPI communication with SD card
+const byte chipSelect = CS_PIN;           // Chip Select pin for SPI communication with SD card
 const int initialHeight = 603;            // Initial height for getting sea level pressure [m]
 const String dFileName = "antares.txt";   // Data filename in SD  
 
