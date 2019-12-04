@@ -45,11 +45,12 @@
 #define IGN           (2)       // I/O pin for ignitor digital output
 #define BUZZ          (8)       // I/O pin for buzzer digital output
 #define IGN_READ      (A1)      // I/O pin for analogic ignitor read
+#define UNUSED_D4     (4)       // Unused D4 pin
 #define ADD_BMP1      0x76      // Address of BMP no. 1
 #define ADD_BMP2      0x77      // Address of BMP no. 2
 #define TIMER_TKS     200       // Timer ticks in a period (Timer 1 runs at 2MHz freq.) - [200 for period of 0.1ms]
-#define T_MEASURE     10000     // Measure period (x 0.1ms) - [56 for 181.8 Hz]
-#define IGN_V_OPEN    2.4       // Ignitor analog reading voltage when open [V]
+#define T_MEASURE     56        // Measure period (x 0.1ms) - [56 for 181.8 Hz]
+#define IGN_V_OPEN    1.6       // Ignitor analog reading voltage when open [V]
 #define IGN_V_PRESENT 4.5       // Ignitor analog reading voltage when present [V]
 #define IGN_V_ACTIVE  0.3       // Ignitor analog reading voltage when MOSFET is active [V]
 #define DELTA_H_FLY   20        // Height difference with respect to the launch site for flight condition [m]
@@ -77,8 +78,8 @@ volatile byte ignState = 0;               // State of the ignitor
 volatile bool led_on = false;             // Variable for test LED state
 
 Adafruit_BMP280 bmp1, bmp2;               // Object used as BMP280 driver - I2C use
-Voo voo1 = Voo(56, 0.5);                  // Object containing height, velocity, acceleration - sensor 1
-Voo voo2 = Voo(56, 0.5);                  // Object containing height, velocity, acceleration - sensor 2
+Voo voo1 = Voo(0.0056, 1.0);              // Object containing height, velocity, acceleration - sensor 1
+Voo voo2 = Voo(0.0056, 1.0);              // Object containing height, velocity, acceleration - sensor 2
 volatile unsigned long timeSave1 = 0UL;   // Variable used for storing moment of last measure of sensor 1
 volatile unsigned long timeSave2 = 0UL;   // Variable used for storing moment of last measure of sensor 2
 volatile float bmpPi1, bmpPi2;            // Initial pressures on sensors 1 and 2
@@ -99,12 +100,21 @@ ISR(TIMER1_COMPA_vect){
   }
 }
 
+/* Get present time in seconds */
+float get_time(){
+  noInterrupts();
+  float t = timeCount/10000.0;
+  interrupts();
+  return(t);
+}
+
+
 /* Save data to SD function */
 void save_to_SD(int bmp, Voo dados){
   File dataFile;                                        // Object used as SD driver - SPI use
 //  Serial.println(F("Dados de altura internos:"));
   int vsize = 6;
-  float fVect [vsize] = {timeCount/10000.0,             // Time since start-up in seconds
+  float fVect [vsize] = {get_time(),                    // Time since start-up in seconds
                         dados.pressao,                  // Last acquired pressure [hPa]
                         dados.altura.getValor(0),       // Last acquired height measure [m]
                         dados.alturaF.getValor(0),      // Last acquired filtered height measure [m]
@@ -124,7 +134,7 @@ void save_to_SD(int bmp, Voo dados){
     dataFile.print(F("\t"));
     dataFile.print(fVect[i]);
     Serial.print(F("\t"));
-    Serial.print(fVect[i],5);
+    Serial.print(fVect[i],1);
   }
   for(int i=0; i<2; i++){
     dataFile.print(F("\t"));
@@ -156,8 +166,8 @@ bool configure_BMP(byte bmp_nb){
     return(false);
   }
   bmpHandle->setSampling(Adafruit_BMP280::MODE_NORMAL,        /* Operating Mode. */
-                  Adafruit_BMP280::SAMPLING_NONE,             /* Temp. oversampling */
-                  Adafruit_BMP280::SAMPLING_NONE,             /* Pressure oversampling */
+                  Adafruit_BMP280::SAMPLING_X1,               /* Temp. oversampling */
+                  Adafruit_BMP280::SAMPLING_X1,               /* Pressure oversampling */
                   Adafruit_BMP280::FILTER_OFF,                /* Filtering. */
                   Adafruit_BMP280::STANDBY_MS_1);             /* Standby time. */
   for(int i=0; i<100; i++){
@@ -238,22 +248,22 @@ float read_avg_BMP(byte bmp_nb){
 }
 
 /* Function to get time interval between sensor readings */
-unsigned int get_dt(byte bmp_nb){
+float get_dt(byte bmp_nb){
   if(bmp_nb <=0 || bmp_nb >=3){
     Serial.println(F("ERROR: get_dt -> invalid BMP number!"));
     return(0);
   }
   unsigned long timeSave; 
-  unsigned int dt;
+  unsigned int deltaT;
   timeSave = (bmp_nb == 1) ? timeSave1 : timeSave2; // Get last saved time instant
   noInterrupts();                                   // Disable interrupts because of manipulation of timeCount
-  dt = (unsigned int)(timeCount - timeSave);        // Effective dT calculation
+  deltaT = (unsigned int)(timeCount - timeSave);        // Effective dT calculation
   if(bmp_nb == 1)                                   // Update saved time instant
     timeSave1 = timeCount;
   else
     timeSave2 = timeCount;
   interrupts();                                     // Re-enable interrupts
-  return(dt);
+  return(deltaT/10000.0);
 }
 
 /* LED configuration - call on setup */
@@ -275,8 +285,8 @@ void LED_toggle(){
       Serial.println(F("LED OFF"));
     }
     led_on = !led_on;
-    Serial.print(F("timeCount = "));
-    Serial.println(timeCount);
+    Serial.print(F("time = "));
+    Serial.println(get_time());
     Serial.print(F("measureCount = "));
     Serial.println(measureCount);
 }
@@ -285,6 +295,8 @@ void LED_toggle(){
 byte get_ignitor_state(){
   int value = analogRead(IGN_READ);
   float voltage = 5*value/1023.0;
+  Serial.print(F("Voltage reading is = "));
+  Serial.println(voltage,1);
   byte state;
   if(voltage > 0.9*IGN_V_OPEN && voltage < 1.1*IGN_V_OPEN){
      state = 0;
@@ -382,14 +394,14 @@ void setup() {
   }
   else{
     Serial.println(F("SD configuration done."));
-    Serial.print(F("Saving data in :"));
+    Serial.print(F("Saving data in: "));
     Serial.println(dFileName);
     File dataFile;
     dataFile = SD.open(dFileName, FILE_WRITE);
     if(!dataFile){
       Serial.println(F("---> ERRO na abertura do arquivo"));
     }
-    dataFile.println(F("\n\n"));
+    dataFile.println(F("\n"));
     dataFile.close();
   }
   
@@ -411,6 +423,8 @@ void setup() {
   interrupts();         // Enable interruptions
 
   Serial.println(F("Configurations finished."));
+  Serial.print(F("Running with Tau = "));
+  Serial.println(voo1.tau,2);
 }
 
 
@@ -418,17 +432,19 @@ void setup() {
 /* ----- Main function definition ----- */
 
 void loop() {
-
+  // Read height and pressure
   float h1 = read_avg_BMP(1);
   voo1.dt = get_dt(1);
-  voo1.addAltura(h1);
   float p1 = bmp1.readPressure();
   voo1.pressao = p1;
   float h2 = read_avg_BMP(2);
   voo2.dt = get_dt(2);
-  voo2.addAltura(h2);
   float p2 = bmp2.readPressure();
   voo2.pressao = p2;
+  // Insert on arrays and do calculations
+  voo1.addAltura(h1);
+  voo2.addAltura(h2);
+  // Save data to SD card
   save_to_SD(1,voo1);
   save_to_SD(2,voo2);
 //  if(measureCount == 0){
@@ -436,61 +452,91 @@ void loop() {
 //  }
   ignState = get_ignitor_state();
   switch(state){
-    case 0:         // E1 = Initialization
-      if(ignState != 1){
-        Serial.println(F("PROBLEM: Ignitor not nominal!"));
-        state = 10;
-      }
-      else if (flight_condition()){
-        Serial.println(F("E1 --> E2"));
-        state = 1;
+    case 0:
+      if(delayCount > 3636){
+        if(ignState == 1){
+          state = 1;
+        }
+        else if(ignState == 0){
+          state = 3;
+        }
       }
       break;
-    case 1:         // E2 = Propulsive Flight
-      if(burn_end_condition()){
-        Serial.println(F("E2 --> E3"));
+    case 1:
+      if(delayCount > 1818){
+        digitalWrite(IGN,LOW);
+        digitalWrite(BUZZ,LOW);
+        delayCount = 0;
         state = 2;
       }
       break;
-    case 2:         // E3 = Ballistic Flight
-      if(apogee_condition()){
-        Serial.println(F("E3 --> E4"));
-        digitalWrite(IGN, HIGH);    // Activate Ignition
-        state = 3;
+    case 2:
+      if(delayCount > 1818){
+        digitalWrite(IGN,HIGH);
+        digitalWrite(BUZZ,HIGH);
         delayCount = 0;
+        state = 1;
       }
       break;
-    case 3:         // E4 = Parachute 
-      if(ignState == 2 && delayCount > 1818){   // Wait for approximately 10s
-        Serial.println(F("Deactivate ignitor."));
-        digitalWrite(IGN, LOW);                 // Deactivate Ignition
-      }
-      else if (ignState == 1){                  // Re-activate Ignition if NC is still present (resistance unchanged)
-        Serial.println(F("PROBLEM: Re-activate ignition!"));
-        digitalWrite(IGN, HIGH);
-        delayCount = 0;
-      }
-      if(landing_condition()){
-        Serial.println("E4 --> E5");
-        state = 4;
-      }
-      break;
-    case 4:         // E5 = Ground reached
-      digitalWrite(IGN, LOW);                 // Deactivate Ignition
-      digitalWrite(BUZZ, HIGH);               // Activate Buzzer
-      break;
-    case 10:        // E11 = Failure mode
-      Serial.println(F("Failure state!"));
-      while(1){                               // Continuous loop of buzzer beeps (1s)
-        if(delayCount > 362){
-          digitalWrite(BUZZ, HIGH);           // Activate Buzzer
-          delayCount = 0;
-        }
-        else if(delayCount > 181){
-          digitalWrite(BUZZ, LOW);            // De-activate Buzzer
-        }
-      }
-      return;
-      break;
+    case 3:
+      digitalWrite(BUZZ,HIGH);
   }
+//  switch(state){
+//    case 0:         // E1 = Initialization
+//      if(ignState != 1){
+//        Serial.println(F("PROBLEM: Ignitor not nominal!"));
+//        state = 10;
+//      }
+//      else if (flight_condition()){
+//        Serial.println(F("E1 --> E2"));
+//        state = 1;
+//      }
+//      break;
+//    case 1:         // E2 = Propulsive Flight
+//      if(burn_end_condition()){
+//        Serial.println(F("E2 --> E3"));
+//        state = 2;
+//      }
+//      break;
+//    case 2:         // E3 = Ballistic Flight
+//      if(apogee_condition()){
+//        Serial.println(F("E3 --> E4"));
+//        digitalWrite(IGN, HIGH);    // Activate Ignition
+//        state = 3;
+//        delayCount = 0;
+//      }
+//      break;
+//    case 3:         // E4 = Parachute 
+//      if(ignState == 2 && delayCount > 1818){   // Wait for approximately 10s
+//        Serial.println(F("Deactivate ignitor."));
+//        digitalWrite(IGN, LOW);                 // Deactivate Ignition
+//      }
+//      else if (ignState == 1){                  // Re-activate Ignition if NC is still present (resistance unchanged)
+//        Serial.println(F("PROBLEM: Re-activate ignition!"));
+//        digitalWrite(IGN, HIGH);
+//        delayCount = 0;
+//      }
+//      if(landing_condition()){
+//        Serial.println("E4 --> E5");
+//        state = 4;
+//      }
+//      break;
+//    case 4:         // E5 = Ground reached
+//      digitalWrite(IGN, LOW);                 // Deactivate Ignition
+//      digitalWrite(BUZZ, HIGH);               // Activate Buzzer
+//      break;
+//    case 10:        // E11 = Failure mode
+//      Serial.println(F("Failure state!"));
+//      while(1){                               // Continuous loop of buzzer beeps (1s)
+//        if(delayCount > 362){
+//          digitalWrite(BUZZ, HIGH);           // Activate Buzzer
+//          delayCount = 0;
+//        }
+//        else if(delayCount > 181){
+//          digitalWrite(BUZZ, LOW);            // De-activate Buzzer
+//        }
+//      }
+//      return;
+//      break;
+//  }
 }

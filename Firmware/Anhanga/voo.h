@@ -11,8 +11,8 @@ class Voo {
     float tau;            // Constante de tempo do filtro de primeira ordem
     float pressao;        // Armazena ultimo valor de pressao
     
-    Voo(int t, float fTau){
-      dt = t/10000.0;
+    Voo(float dTime, float fTau){
+      dt = dTime;
       tau = fTau;
     }
     
@@ -20,7 +20,7 @@ class Voo {
       if (!altura.isFirst()) {
         altura.adicionarValor(dado);
         // Filtro 1a ordem
-        float fh = tau / (dt+tau) * ( alturaF.getValor(0) + dt/tau*altura.getValor(0));
+        float fh = (tau*alturaF.getValor(0) + dt*altura.getValor(0)) / (dt+tau);
         alturaF.adicionarValor(fh);
         // Derivada Euler explicito
         float v = (alturaF.getValor(0) - alturaF.getValor(-1)) / dt;
