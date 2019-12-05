@@ -10,6 +10,7 @@ class Voo {
     float dt;             // Intervalo de tempo entre medidas [s]
     float tau;            // Constante de tempo do filtro de primeira ordem
     float pressao;        // Armazena ultimo valor de pressao
+
     
     Voo(float dTime, float fTau){
       dt = dTime;
@@ -32,6 +33,7 @@ class Voo {
         alturaF.adicionarValor(dado);
       }
     }
+    
 };
 
 #endif

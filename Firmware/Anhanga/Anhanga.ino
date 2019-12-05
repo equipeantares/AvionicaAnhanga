@@ -53,12 +53,14 @@
 #define IGN_V_OPEN    1.6       // Ignitor analog reading voltage when open [V]
 #define IGN_V_PRESENT 4.5       // Ignitor analog reading voltage when present [V]
 #define IGN_V_ACTIVE  0.3       // Ignitor analog reading voltage when MOSFET is active [V]
-#define DELTA_H_FLY   20        // Height difference with respect to the launch site for flight condition [m]
-#define DELTA_H_LAND  50        // Height difference with respect to the launch site for landing condition [m]
-#define DELTA_V_FLY   20        // Minimum velocity for flight condition [m/s]
+#define DELTA_H_FLY   2         // Height difference with respect to the launch site for flight condition [m]
+#define DELTA_H_LAND  1.5       // Height difference with respect to the launch site for landing condition [m]
+#define DELTA_V_FLY   0.5       // Minimum velocity for flight condition [m/s]
+#define DELTA_T_BURN  0.5       // Minimum time after lift-off from which we begin looking for apogee condition [s]
+#define T_MAX_IGN     20.0      // Maximum time after lift-off from which we activate parachute no matter what [s]
 #define LED_TEST      (13)      // Digital output pin for testing
-#define V0            100       // Velocity to trigger apogee condition [m/s]
-#define V0_MARGIN     0.1       // Margin [%] around V0 value
+#define V0            0.5       // Velocity to trigger apogee condition [m/s]
+#define V0_MARGIN     0.2       // Margin [%] around V0 value
 
 
 /* ----- Constant definitions ----- */
@@ -82,6 +84,7 @@ Voo voo1 = Voo(0.0056, 1.0);              // Object containing height, velocity,
 Voo voo2 = Voo(0.0056, 1.0);              // Object containing height, velocity, acceleration - sensor 2
 volatile unsigned long timeSave1 = 0UL;   // Variable used for storing moment of last measure of sensor 1
 volatile unsigned long timeSave2 = 0UL;   // Variable used for storing moment of last measure of sensor 2
+volatile unsigned long timeLiftOff = 0UL; // Variable used for storing lift-off moment
 volatile float bmpPi1, bmpPi2;            // Initial pressures on sensors 1 and 2
 volatile float bmpHi1, bmpHi2;            // Initial height measured on sensors 1 and 2
 volatile float bmpD1, bmpD2;              // Derivative of height w.r.t. pressure on initial pressure 
@@ -171,11 +174,12 @@ bool configure_BMP(byte bmp_nb){
                   Adafruit_BMP280::FILTER_OFF,                /* Filtering. */
                   Adafruit_BMP280::STANDBY_MS_1);             /* Standby time. */
   for(int i=0; i<100; i++){
-    bmpPi += bmpHandle->readPressure();                        // Read initial pressure
-    bmpHi += bmpHandle->readAltitude();                        // Read initial altitude (exponential method)
+    bmpPi += bmpHandle->readPressure();                        // Read initial pressure [Pa]
+    bmpHi += bmpHandle->readAltitude();                        // Read initial altitude (exponential method) [m]
   }
-  bmpPi = bmpPi/100.0;                                        // Get average of pressure in 100 measures
-  bmpHi = bmpHi/100.0;                                        // Get average of height in 100 measures
+  bmpPi = bmpPi/100.0;                                        // Get average of pressure in 100 measures [Pa]
+  bmpHi = bmpHi/100.0;                                        // Get average of height in 100 measures [m]
+  bmpPi /= 100.0;                                             // Transform pressure to hPa (divide by 100)
   bmpDi = -2260.209*pow(bmpPi,-0.8097);                       // Calculate derivative in initial pressure
   if (bmp_nb == 1){                                           // Save data in according variables
     bmpPi1 = bmpPi;
@@ -207,11 +211,15 @@ float read_BMP_h(byte bmp_nb){
     return(0);
   }
   float p,h;
-  Adafruit_BMP280 * bmpHandle = (bmp_nb == 1) ? &bmp1 : &bmp2;      // Gets bmp object handle accordingly
+  Adafruit_BMP280 * bmpHandle = (bmp_nb == 1) ? &bmp1 : &bmp2;      // Get bmp object handle accordingly
+  Voo * flightHandle = (bmp_nb == 1) ? &voo1 : &voo2;               // Get flight object handle acconrdingly
   float bmpPi = (bmp_nb == 1) ? bmpPi1 : bmpPi2;
   float bmpHi = (bmp_nb == 1) ? bmpHi1 : bmpHi2;
   float bmpDi = (bmp_nb == 1) ? bmpD1 : bmpD2;
-  p = bmpHandle->readPressure();                                    // Read pressure
+  p = bmpHandle->readPressure();                                    // Read pressure [Pa]
+  flightHandle->pressao = p;                                        // Save in flight object
+  p /= 100.0;                                                       // Transform pressure to hPa
+//  h = 44330 * (1.0 - pow(p / 1013.25, 0.1903));                     // Normal calculation of height
   h = bmpHi + bmpDi * (p - bmpPi);                                  // Linearization of height
   return(h);
 }
@@ -240,7 +248,7 @@ float read_avg_BMP(byte bmp_nb){
     }
   }
   if(failed >= 3){                          // If the measure has failed more than 3 times, returns 0.
-    Serial.print(F("ERROR: BMP failed more than 3 times!"));
+//    Serial.print(F("ERROR: BMP failed more than 3 times!"));
     return(0.0);
   }
   else
@@ -257,7 +265,7 @@ float get_dt(byte bmp_nb){
   unsigned int deltaT;
   timeSave = (bmp_nb == 1) ? timeSave1 : timeSave2; // Get last saved time instant
   noInterrupts();                                   // Disable interrupts because of manipulation of timeCount
-  deltaT = (unsigned int)(timeCount - timeSave);        // Effective dT calculation
+  deltaT = (unsigned int)(timeCount - timeSave);    // Effective dT calculation
   if(bmp_nb == 1)                                   // Update saved time instant
     timeSave1 = timeCount;
   else
@@ -310,44 +318,14 @@ byte get_ignitor_state(){
   return(state);
 }
 
-/* Identify Apogee Condition */
-bool apogee_condition(){
-  float v1 = voo1.velocidadeF.getValor(0);
-  float v2 = voo2.velocidadeF.getValor(0);
-  if( (1-V0_MARGIN)*V0 < v1 < (1+V0_MARGIN)*V0 || (1-V0_MARGIN)*V0 < v2 < (1+V0_MARGIN)*V0 ){
-    return(true);
-  }
-  else{
-    return(false);
-  }
-}
-
-/* Identify Launch Condition */
+/* Identify Flight Condition */
 bool flight_condition(){
   float h1 = voo1.alturaF.getValor(0);
   float h2 = voo2.alturaF.getValor(0);
   float v1 = voo1.velocidadeF.getValor(0);
   float v2 = voo2.velocidadeF.getValor(0);
-  if( h1 > bmpHi1 + DELTA_H_FLY && 
-      h2 > bmpHi2 + DELTA_H_FLY &&
-      v1 > DELTA_V_FLY && 
-      v2 > DELTA_V_FLY)
-  {
-    return(true);
-  }
-  else{
-    return(false);
-  }
-}
-
-/* Identify Landing Condition */
-bool landing_condition(){
-  if( voo1.alturaF.getValor(0) < bmpHi1 + DELTA_H_LAND &&
-      voo1.alturaF.getValor(0) > bmpHi1 - DELTA_H_LAND && 
-      voo2.alturaF.getValor(0) < bmpHi2 + DELTA_H_LAND &&
-      voo1.alturaF.getValor(0) > bmpHi2 - DELTA_H_LAND &&
-      voo1.velocidadeF.getValor(0) < DELTA_V_FLY && 
-      voo2.velocidadeF.getValor(0) < DELTA_V_FLY)
+  if( (h1 > bmpHi1 + DELTA_H_FLY && v1 > DELTA_V_FLY) ||
+      (h2 > bmpHi2 + DELTA_H_FLY && v2 > DELTA_V_FLY) )
   {
     return(true);
   }
@@ -358,20 +336,51 @@ bool landing_condition(){
 
 /* Identify end of propulsion Condition */
 bool burn_end_condition(){
-  byte count = 0;
-  for(int i=0; i<5; i++){
-    if(voo1.velocidadeF.getValor(-i) < voo1.velocidadeF.getValor(-i-1)){
-      count++; 
-    }
-  }
-  
-  if(count>4){
+  noInterrupts();
+  int timeSinceLO = timeCount - timeLiftOff;
+  interrupts();
+  if(timeSinceLO/10000.0 > DELTA_T_BURN){
     return(true);
   }
   else{
     return(false);
   }
 }
+
+/* Identify Apogee Condition */
+bool apogee_condition(){
+  float v1 = voo1.velocidadeF.getValor(0);
+  float v2 = voo2.velocidadeF.getValor(0);
+  noInterrupts();
+  long timeSinceLO = timeCount - timeLiftOff;
+  interrupts();
+  if( ((1-V0_MARGIN)*V0 < v1 && v1 < (1+V0_MARGIN)*V0) || 
+      ((1-V0_MARGIN)*V0 < v2 && v2 < (1+V0_MARGIN)*V0) ||
+      timeSinceLO/10000.0 > T_MAX_IGN)
+  {
+    return(true);
+  }
+  else{
+    return(false);
+  }
+}
+
+/* Identify Landing Condition */
+bool landing_condition(){
+  float h1 = voo1.alturaF.getValor(0);
+  float h2 = voo2.alturaF.getValor(0);
+  float v1 = voo1.velocidadeF.getValor(0);
+  float v2 = voo2.velocidadeF.getValor(0);
+  if( (h1 < bmpHi1 + DELTA_H_LAND && h1 > bmpHi1 - DELTA_H_LAND && v1 < DELTA_V_FLY)  ||
+      (h2 < bmpHi2 + DELTA_H_LAND && h2 > bmpHi2 - DELTA_H_LAND && v2 < DELTA_V_FLY) )
+  {
+    return(true);
+  }
+  else{
+    return(false);
+  }
+}
+
 
 
 /* ----- Setup function definition ----- */
@@ -435,108 +444,104 @@ void loop() {
   // Read height and pressure
   float h1 = read_avg_BMP(1);
   voo1.dt = get_dt(1);
-  float p1 = bmp1.readPressure();
-  voo1.pressao = p1;
   float h2 = read_avg_BMP(2);
   voo2.dt = get_dt(2);
-  float p2 = bmp2.readPressure();
-  voo2.pressao = p2;
   // Insert on arrays and do calculations
   voo1.addAltura(h1);
   voo2.addAltura(h2);
   // Save data to SD card
   save_to_SD(1,voo1);
   save_to_SD(2,voo2);
-//  if(measureCount == 0){
-//    LED_toggle();
-//  }
   ignState = get_ignitor_state();
-  switch(state){
-    case 0:
-      if(delayCount > 3636){
-        if(ignState == 1){
-          state = 1;
-        }
-        else if(ignState == 0){
-          state = 3;
-        }
-      }
-      break;
-    case 1:
-      if(delayCount > 1818){
-        digitalWrite(IGN,LOW);
-        digitalWrite(BUZZ,LOW);
-        delayCount = 0;
-        state = 2;
-      }
-      break;
-    case 2:
-      if(delayCount > 1818){
-        digitalWrite(IGN,HIGH);
-        digitalWrite(BUZZ,HIGH);
-        delayCount = 0;
-        state = 1;
-      }
-      break;
-    case 3:
-      digitalWrite(BUZZ,HIGH);
-  }
 //  switch(state){
-//    case 0:         // E1 = Initialization
-//      if(ignState != 1){
-//        Serial.println(F("PROBLEM: Ignitor not nominal!"));
-//        state = 10;
-//      }
-//      else if (flight_condition()){
-//        Serial.println(F("E1 --> E2"));
-//        state = 1;
+//    case 0:
+//      if(delayCount > 3636){
+//        if(ignState == 1){
+//          state = 1;
+//        }
+//        else if(ignState == 0){
+//          state = 3;
+//        }
 //      }
 //      break;
-//    case 1:         // E2 = Propulsive Flight
-//      if(burn_end_condition()){
-//        Serial.println(F("E2 --> E3"));
+//    case 1:
+//      if(delayCount > 1818){
+//        digitalWrite(IGN,LOW);
+//        digitalWrite(BUZZ,LOW);
+//        delayCount = 0;
 //        state = 2;
 //      }
 //      break;
-//    case 2:         // E3 = Ballistic Flight
-//      if(apogee_condition()){
-//        Serial.println(F("E3 --> E4"));
-//        digitalWrite(IGN, HIGH);    // Activate Ignition
-//        state = 3;
+//    case 2:
+//      if(delayCount > 1818){
+//        digitalWrite(IGN,HIGH);
+//        digitalWrite(BUZZ,HIGH);
 //        delayCount = 0;
+//        state = 1;
 //      }
 //      break;
-//    case 3:         // E4 = Parachute 
-//      if(ignState == 2 && delayCount > 1818){   // Wait for approximately 10s
-//        Serial.println(F("Deactivate ignitor."));
-//        digitalWrite(IGN, LOW);                 // Deactivate Ignition
-//      }
-//      else if (ignState == 1){                  // Re-activate Ignition if NC is still present (resistance unchanged)
-//        Serial.println(F("PROBLEM: Re-activate ignition!"));
-//        digitalWrite(IGN, HIGH);
-//        delayCount = 0;
-//      }
-//      if(landing_condition()){
-//        Serial.println("E4 --> E5");
-//        state = 4;
-//      }
-//      break;
-//    case 4:         // E5 = Ground reached
-//      digitalWrite(IGN, LOW);                 // Deactivate Ignition
-//      digitalWrite(BUZZ, HIGH);               // Activate Buzzer
-//      break;
-//    case 10:        // E11 = Failure mode
-//      Serial.println(F("Failure state!"));
-//      while(1){                               // Continuous loop of buzzer beeps (1s)
-//        if(delayCount > 362){
-//          digitalWrite(BUZZ, HIGH);           // Activate Buzzer
-//          delayCount = 0;
-//        }
-//        else if(delayCount > 181){
-//          digitalWrite(BUZZ, LOW);            // De-activate Buzzer
-//        }
-//      }
-//      return;
-//      break;
+//    case 3:
+//      digitalWrite(BUZZ,HIGH);
 //  }
+  switch(state){
+    case 0:         // E1 = Initialization
+      if(ignState != 1){
+        Serial.println(F("PROBLEM: Ignitor not nominal!"));
+        state = 10;
+      }
+      else if (flight_condition()){
+        Serial.println(F("E1 --> E2"));
+        noInterrupts();
+        timeLiftOff = timeCount;
+        interrupts();
+        state = 1;
+      }
+      break;
+    case 1:         // E2 = Propulsive Flight
+      if(burn_end_condition()){
+        Serial.println(F("E2 --> E3"));
+        state = 2;
+      }
+      break;
+    case 2:         // E3 = Ballistic Flight
+      if(apogee_condition()){
+        Serial.println(F("E3 --> E4"));
+        digitalWrite(IGN, HIGH);    // Activate Ignition
+        state = 3;
+        delayCount = 0;
+      }
+      break;
+    case 3:         // E4 = Parachute 
+      if(ignState == 2 && delayCount > 1818){   // Wait for approximately 10s
+        Serial.println(F("Deactivate ignitor."));
+        digitalWrite(IGN, LOW);                 // Deactivate Ignition
+      }
+      else if (ignState == 1){                  // Re-activate Ignition if NC is still present (resistance unchanged)
+        Serial.println(F("PROBLEM: Re-activate ignition!"));
+        digitalWrite(IGN, HIGH);
+        delayCount = 0;
+      }
+      if(landing_condition()){
+        Serial.println("E4 --> E5");
+        state = 4;
+      }
+      break;
+    case 4:         // E5 = Ground reached
+      digitalWrite(IGN, LOW);                 // Deactivate Ignition
+      digitalWrite(BUZZ, HIGH);               // Activate Buzzer
+      break;
+    case 10:        // E11 = Failure mode
+      Serial.println(F("Failure state!"));
+      while(1){                               // Continuous loop of buzzer beeps (1s)
+        if(delayCount > 362){
+          digitalWrite(BUZZ, HIGH);           // Activate Buzzer
+          delayCount = 0;
+        }
+        else if(delayCount > 181){
+          digitalWrite(BUZZ, LOW);            // De-activate Buzzer
+        }
+      }
+      return;
+      break;
+  }
 }
