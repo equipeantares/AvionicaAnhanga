@@ -53,13 +53,13 @@
 #define IGN_V_OPEN    1.6       // Ignitor analog reading voltage when open [V]
 #define IGN_V_PRESENT 4.5       // Ignitor analog reading voltage when present [V]
 #define IGN_V_ACTIVE  0.3       // Ignitor analog reading voltage when MOSFET is active [V]
-#define DELTA_H_FLY   2         // Height difference with respect to the launch site for flight condition [m]
-#define DELTA_H_LAND  1.5       // Height difference with respect to the launch site for landing condition [m]
-#define DELTA_V_FLY   0.5       // Minimum velocity for flight condition [m/s]
-#define DELTA_T_BURN  0.5       // Minimum time after lift-off from which we begin looking for apogee condition [s]
-#define T_MAX_IGN     20.0      // Maximum time after lift-off from which we activate parachute no matter what [s]
+#define DELTA_H_FLY   50.0      // Height difference with respect to the launch site for flight condition [m]
+#define DELTA_H_LAND  20.0      // Height difference with respect to the launch site for landing condition [m]
+#define DELTA_V_FLY   5.0       // Minimum velocity for flight condition [m/s]
+#define DELTA_T_BURN  2.0       // Minimum time after lift-off from which we begin looking for apogee condition [s]
+#define T_MAX_IGN     12.0      // Maximum time after lift-off from which we activate parachute no matter what [s]
 #define LED_TEST      (13)      // Digital output pin for testing
-#define V0            0.5       // Velocity to trigger apogee condition [m/s]
+#define V0            55.0      // Velocity to trigger apogee condition [m/s]
 #define V0_MARGIN     0.2       // Margin [%] around V0 value
 
 
