@@ -371,7 +371,7 @@ bool landing_condition(){
   float h2 = voo2.alturaF.getValor(0);
   float v1 = voo1.velocidadeF.getValor(0);
   float v2 = voo2.velocidadeF.getValor(0);
-  if( (h1 < bmpHi1 + DELTA_H_LAND && h1 > bmpHi1 - DELTA_H_LAND && v1 < DELTA_V_FLY)  ||
+  if( (h1 < bmpHi1 + DELTA_H_LAND && h1 > bmpHi1 - DELTA_H_LAND && v1 < DELTA_V_FLY)  ||    // TODO: Change for absolute velocity!!!
       (h2 < bmpHi2 + DELTA_H_LAND && h2 > bmpHi2 - DELTA_H_LAND && v2 < DELTA_V_FLY) )
   {
     return(true);
