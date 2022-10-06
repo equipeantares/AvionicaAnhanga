@@ -1,0 +1,8 @@
+(fp_lib_table
+  (lib (name ESP8266)(type KiCad)(uri ${KIPRJMOD}/lib/ESP8266.pretty)(options "")(descr ""))
+  (lib (name LoRA)(type KiCad)(uri ${KIPRJMOD}/lib/E32.pretty)(options "")(descr ""))
+  (lib (name CharlesLabs)(type KiCad)(uri ${KIPRJMOD}/lib/sensors/Charleslabs_Parts.pretty)(options "")(descr ""))
+  (lib (name GPS)(type KiCad)(uri ${KIPRJMOD}/lib/sensors/GPS.pretty)(options "")(descr ""))
+  (lib (name Logos)(type KiCad)(uri ${KIPRJMOD}/lib/Logos.pretty)(options "")(descr ""))
+  (lib (name Irapuru)(type KiCad)(uri ${KIPRJMOD}/lib/Irapuru/Irapuru.pretty)(options "")(descr ""))
+)

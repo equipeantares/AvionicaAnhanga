@@ -1,0 +1,7 @@
+(sym_lib_table
+  (lib (name LoRA)(type Legacy)(uri "/home/gustavo/Área de Trabalho/Unicamp/Antares/KiCad/teste/BaseAurora/lib/E32-xxxT20D.lib")(options "")(descr ""))
+  (lib (name BaseAurora)(type Legacy)(uri ${KIPRJMOD}/BaseAurora.lib)(options "")(descr ""))
+  (lib (name Avionica-rescue)(type Legacy)(uri ${KIPRJMOD}/Avionica-rescue.lib)(options "")(descr ""))
+  (lib (name Charleslabs_Parts)(type Legacy)(uri ${KIPRJMOD}/lib/sensors/Charleslabs_Parts.lib)(options "")(descr ""))
+  (lib (name ADEM)(type Legacy)(uri ${KIPRJMOD}/lib/sensors/ADEM.lib)(options "")(descr ""))
+)
